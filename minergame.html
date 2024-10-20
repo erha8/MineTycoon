@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Mine Company Tycoon</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #1a1a2e;
+            font-family: 'Arial', sans-serif;
+            color: #ffffff;
+        }
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #16213e;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        #gameCanvas {
+            border: 2px solid #0f3460;
+        }
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(15, 52, 96, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        #mineSelector {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background-color: rgba(15, 52, 96, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+        }
+        .button {
+            background-color: #e94560;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            font-weight: bold;
+            text-transform: uppercase;
+        }
+        .button:hover {
+            background-color: #ff6b6b;
+            transform: translateY(-2px);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+        }
+        .locked {
+            color: #e94560;
+            font-weight: bold;
+        }
+        #allMinesInfo {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background-color: rgba(15, 52, 96, 0.8);
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            max-width: 780px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+        }
+        .mineInfo {
+            margin: 5px;
+            padding: 5px;
+            background-color: rgba(25, 62, 106, 0.8);
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="ui">
+            <div>Money: $<span id="moneyDisplay">0</span></div>
+            <div>Current Ore: <span id="currentOreDisplay">Stone</span></div>
+            <div>Miners: <span id="minersDisplay">0</span></div>
+            <div>Miner Efficiency: <span id="efficiencyDisplay">1</span>x</div>
+            <button id="buyMinerBtn" class="button">Buy Miner ($10)</button>
+            <button id="upgradeOreBtn" class="button">Upgrade Ore ($100)</button>
+            <button id="upgradeEfficiencyBtn" class="button">Upgrade Efficiency ($10)</button>
+        </div>
+        <div id="mineSelector">
+            <button id="prevMineBtn" class="button">◀</button>
+            <span id="currentMineDisplay">Stone Mine</span>
+            <button id="nextMineBtn" class="button">▶</button>
+        </div>
+        <div id="allMinesInfo"></div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        const game = {
+            money: 10,
+            currentMineIndex: 0,
+            mines: [
+                { ore: 'stone', miners: 0, health: 5, maxHealth: 5, minerCost: 10, unlocked: true },
+                { ore: 'coal', miners: 0, health: 50, maxHealth: 50, minerCost: 50, unlocked: false },
+                { ore: 'iron', miners: 0, health: 200, maxHealth: 200, minerCost: 250, unlocked: false },
+                { ore: 'gold', miners: 0, health: 1000, maxHealth: 1000, minerCost: 1000, unlocked: false },
+                { ore: 'diamond', miners: 0, health: 10000, maxHealth: 10000, minerCost: 5000, unlocked: false }
+            ],
+            ores: ['stone', 'coal', 'iron', 'gold', 'diamond'],
+            orePrices: {stone: 1, coal: 5, iron: 10, gold: 50, diamond: 250},
+            upgradeCosts: {stone: 100, coal: 1000, iron: 10000, gold: 100000},
+            mineSize: 100,
+            mineRegenerationRate: 0.1,
+            minerEfficiency: 1,
+            efficiencyUpgradeCost: 10
+        };
+
+        function updateDisplay() {
+            const currentMine = game.mines[game.currentMineIndex];
+            document.getElementById('moneyDisplay').textContent = Math.floor(game.money);
+            document.getElementById('currentOreDisplay').textContent = currentMine.ore;
+            document.getElementById('minersDisplay').textContent = currentMine.miners;
+            document.getElementById('efficiencyDisplay').textContent = game.minerEfficiency.toFixed(1);
+            document.getElementById('buyMinerBtn').textContent = `Buy Miner ($${currentMine.minerCost})`;
+            document.getElementById('upgradeEfficiencyBtn').textContent = `Upgrade Efficiency ($${game.efficiencyUpgradeCost})`;
+            
+            if (currentMine.unlocked) {
+                document.getElementById('currentMineDisplay').textContent = `${currentMine.ore.charAt(0).toUpperCase() + currentMine.ore.slice(1)} Mine`;
+                document.getElementById('currentMineDisplay').classList.remove('locked');
+            } else {
+                document.getElementById('currentMineDisplay').textContent = "Locked Mine";
+                document.getElementById('currentMineDisplay').classList.add('locked');
+            }
+            
+            const nextOreIndex = game.ores.indexOf(currentMine.ore) + 1;
+            if (nextOreIndex < game.ores.length && currentMine.unlocked) {
+                document.getElementById('upgradeOreBtn').textContent = `Upgrade to ${game.ores[nextOreIndex]} ($${game.upgradeCosts[currentMine.ore]})`;
+                document.getElementById('upgradeOreBtn').style.display = 'inline';
+            } else {
+                document.getElementById('upgradeOreBtn').style.display = 'none';
+            }
+
+            // Update all mines info
+            const allMinesInfo = document.getElementById('allMinesInfo');
+            allMinesInfo.innerHTML = '';
+            game.mines.forEach(mine => {
+                if (mine.unlocked) {
+                    const mineInfo = document.createElement('div');
+                    mineInfo.className = 'mineInfo';
+                    mineInfo.textContent = `${mine.ore}: ${mine.miners} miners`;
+                    allMinesInfo.appendChild(mineInfo);
+                }
+            });
+        }
+
+        function buyMiner() {
+            const currentMine = game.mines[game.currentMineIndex];
+            if (game.money >= currentMine.minerCost && currentMine.unlocked) {
+                game.money -= currentMine.minerCost;
+                currentMine.miners++;
+                currentMine.minerCost = Math.floor(currentMine.minerCost * 1.1);
+                updateDisplay();
+            }
+        }
+
+        function upgradeOre() {
+            const currentMine = game.mines[game.currentMineIndex];
+            const currentIndex = game.ores.indexOf(currentMine.ore);
+            if (currentIndex < game.ores.length - 1 && currentMine.unlocked) {
+                const cost = game.upgradeCosts[currentMine.ore];
+                if (game.money >= cost) {
+                    game.money -= cost;
+                    game.currentMineIndex++;
+                    game.mines[game.currentMineIndex].unlocked = true;
+                    updateDisplay();
+                }
+            }
+        }
+
+        function upgradeEfficiency() {
+            if (game.money >= game.efficiencyUpgradeCost) {
+                game.money -= game.efficiencyUpgradeCost;
+                game.minerEfficiency += 0.1;
+                game.efficiencyUpgradeCost += 10;
+                updateDisplay();
+            }
+        }
+
+        function switchMine(direction) {
+            let newIndex = (game.currentMineIndex + direction + game.mines.length) % game.mines.length;
+            game.currentMineIndex = newIndex;
+            updateDisplay();
+        }
+
+        function drawMine() {
+            const currentMine = game.mines[game.currentMineIndex];
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Draw mine background
+            ctx.fillStyle = "#2a4494";
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, game.mineSize / 2, 0, 2 * Math.PI);
+            ctx.fill();
+            
+            if (currentMine.unlocked) {
+                // Draw ore veins
+                ctx.fillStyle = getOreColor(currentMine.ore);
+                for (let i = 0; i < 5; i++) {
+                    const angle = Math.random() * 2 * Math.PI;
+                    const distance = Math.random() * (game.mineSize / 4);
+                    const x = centerX + Math.cos(angle) * distance;
+                    const y = centerY + Math.sin(angle) * distance;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5 + Math.random() * 5, 0, 2 * Math.PI);
+                    ctx.fill();
+                }
+                
+                // Draw mine health bar
+                const barWidth = game.mineSize;
+                const barHeight = 10;
+                ctx.fillStyle = "#e94560";
+                ctx.fillRect(centerX - barWidth / 2, centerY + game.mineSize / 2 + 10, barWidth, barHeight);
+                ctx.fillStyle = "#4caf50";
+                ctx.fillRect(centerX - barWidth / 2, centerY + game.mineSize / 2 + 10, barWidth * (currentMine.health / currentMine.maxHealth), barHeight);
+            } else {
+                // Draw lock icon
+                ctx.fillStyle = "#e94560";
+                ctx.font = "30px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("🔒", centerX, centerY);
+            }
+        }
+
+        function getOreColor(ore) {
+            const colors = {
+                stone: "#A0A0A0",
+                coal: "#464646",
+                iron: "#C0C0C0",
+                gold: "#FFD700",
+                diamond: "#B9F2FF"
+            };
+            return colors[ore] || "#FFFFFF";
+        }
+
+        function gameLoop() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, "#1a1a2e");
+            gradient.addColorStop(1, "#16213e");
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Draw ground
+            ctx.fillStyle = "#0f3460";
+            ctx.fillRect(0, 550, canvas.width, 50);
+
+            // Draw mine
+            drawMine();
+
+            // Draw miners
+            const currentMine = game.mines[game.currentMineIndex];
+            if (currentMine.unlocked) {
+                ctx.fillStyle = "#e94560";
+                for (let i = 0; i < currentMine.miners; i++) {
+                    const x = 50 + (i % 15) * 50;
+                    const y = 500 - Math.floor(i / 15) * 60;
+                    ctx.fillRect(x, y, 20, 50);
+                    
+                    // Animate pickaxe
+                    const angle = Math.sin(Date.now() * 0.01 + i) * 0.5;
+                    ctx.save();
+                    ctx.translate(x + 10, y + 25);
+                    ctx.rotate(angle);
+                    ctx.fillRect(0, -25, 5, 30);
+                    ctx.restore();
+                }
+            }
+
+            // Process all unlocked mines
+            game.mines.forEach(mine => {
+                if (mine.unlocked) {
+                    // Mine ore
+                    mine.health = Math.max(0, mine.health - (mine.miners * game.minerEfficiency) / 60);
+                    if (mine.health === 0) {
+                        game.money += game.orePrices[mine.ore];
+                        mine.health = mine.maxHealth;
+                    }
+
+                    // Regenerate mine health
+                    mine.health = Math.min(mine.health + game.mineRegenerationRate / 60, mine.maxHealth);
+                }
+            });
+
+            updateDisplay();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function handleClick(event) {
+            const rect = canvas.getBoundingClientRect();
+            const x = event.clientX - rect.left;
+            const y = event.clientY - rect.top;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            // Check if click is within the mine
+            const distance = Math.sqrt(Math.pow(x - centerX, 2) + Math.pow(y - centerY, 2));
+            if (distance <= game.mineSize / 2) {
+                const currentMine = game.mines[game.currentMineIndex];
+                if (currentMine.unlocked) {
+                    currentMine.health = Math.max(0, currentMine.health - 1);
+                    if (currentMine.health === 0) {
+                        game.money += game.orePrices[currentMine.ore];
+                        currentMine.health = currentMine.maxHealth;
+                    }
+                    updateDisplay();
+                }
+            }
+        }
+
+        document.getElementById('buyMinerBtn').addEventListener('click', buyMiner);
+        document.getElementById('upgradeOreBtn').addEventListener('click', upgradeOre);
+        document.getElementById('upgradeEfficiencyBtn').addEventListener('click', upgradeEfficiency);
+        document.getElementById('prevMineBtn').addEventListener('click', () => switchMine(-1));
+        document.getElementById('nextMineBtn').addEventListener('click', () => switchMine(1));
+        canvas.addEventListener('click', handleClick);
+
+        updateDisplay();
+        gameLoop();
+    </script>
+</body>
+</html>
